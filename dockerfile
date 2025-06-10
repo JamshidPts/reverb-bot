@@ -1,18 +1,19 @@
 FROM python:3.12-slim-bookworm
 
-# 1. Устанавливаем FFmpeg и зависимости
+# 1. Устанавливаем FFmpeg и все зависимости
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ffmpeg \
     libavcodec-dev \
     libavformat-dev \
-    libswscale-dev && \
+    libswscale-dev \
+    libx264-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# 2. Проверяем установку FFmpeg
+# 2. Проверяем что FFmpeg установлен
 RUN ffmpeg -version
 
-# 3. Устанавливаем Python-зависимости
+# 3. Копируем зависимости отдельно для кэширования
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

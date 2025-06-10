@@ -1,21 +1,32 @@
 import os
 import subprocess
+import logging
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+
+# Настройка логов
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # Скачивание файла
+        # 1. Получаем файл
         file = await (update.message.audio or update.message.voice).get_file()
-        input_path = "input.ogg"
+        file_type = "audio" if update.message.audio else "voice"
+        logger.info(f"Received {file_type} file")
+
+        # 2. Скачиваем файл
+        input_path = "/tmp/input.ogg"
         await file.download_to_drive(input_path)
+        logger.info(f"File saved to {input_path}")
 
-        # Абсолютный путь к выходному файлу
-        output_path = os.path.abspath("output.mp3")
-
-        # Команда FFmpeg с полным путем
+        # 3. Обработка FFmpeg
+        output_path = "/tmp/output.mp3"
         cmd = [
             "ffmpeg",
             "-i", input_path,
@@ -23,36 +34,46 @@ async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "-y",  # Перезаписать если существует
             output_path
         ]
-
-        # Запуск с обработкой ошибок
+        
+        logger.info(f"Running command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
         
         if result.returncode != 0:
-            raise Exception(f"FFmpeg error: {result.stderr}")
+            logger.error(f"FFmpeg failed: {result.stderr}")
+            await update.message.reply_text("❌ Ошибка обработки аудио")
+            return
 
-        # Проверка существования файла
+        # 4. Проверяем результат
         if not os.path.exists(output_path):
-            raise Exception("Output file not created")
+            logger.error("Output file not created")
+            await update.message.reply_text("❌ Файл не был создан")
+            return
 
-        # Отправка файла
-        with open(output_path, 'rb') as audio_file:
+        # 5. Отправляем результат
+        with open(output_path, 'rb') as f:
             await update.message.reply_audio(
-                audio=audio_file,
+                audio=f,
                 title="Processed Audio",
                 timeout=30
             )
+        logger.info("Audio sent successfully")
 
     except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        await update.message.reply_text(f"⚠️ Ошибка: {str(e)}")
     finally:
-        # Удаление временных файлов
-        for f in [input_path, output_path]:
+        # 6. Удаляем временные файлы
+        for path in [input_path, output_path]:
             try:
-                if os.path.exists(f):
-                    os.remove(f)
+                if os.path.exists(path):
+                    os.remove(path)
             except:
                 pass
 
-app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(MessageHandler(filters.AUDIO | filters.VOICE, handle_audio))
-app.run_polling()
+if __name__ == "__main__":
+    try:
+        app = ApplicationBuilder().token(TOKEN).build()
+        app.add_handler(MessageHandler(filters.AUDIO | filters.VOICE, handle_audio))
+        app.run_polling()
+    except Exception as e:
+        logger.critical(f"Bot failed: {str(e)}", exc_info=True)
