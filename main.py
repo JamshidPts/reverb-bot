@@ -2,6 +2,8 @@ import os
 import subprocess
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+import sys
+print("Python version:", sys.version)
 
 TOKEN = "7516714864:AAHHlcjWA02MBK_ZaN0wrCvt_wAAAN6TWDY"
 
